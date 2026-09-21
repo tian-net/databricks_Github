@@ -1,74 +1,47 @@
-# Pipeline para sincronizar GitHub con un Git Folder de Databricks.
+# This is a basic automation workflow to help you get started with GitHub Actions.
+name: CI
 
-name: CI - Databricks
-
-# Define cuándo se ejecutará el workflow.
+# Controls when the workflow will run
 on:
-  # Se ejecutará automáticamente cuando se realice un push a main.
+  # Triggers the workflow on push for main and dev branch
   push:
+    paths-ignore:
+      - .github
     branches:
+      # Set your base branch name here
       - main
 
-  # Permite ejecutarlo manualmente desde la pestaña Actions.
-  workflow_dispatch:
-
+# A workflow run is made up of one or more jobs that can run sequentially or in parallel
 jobs:
+  # This workflow contains a single job called "deploy"
   deploy:
-    # Sistema operativo utilizado por GitHub Actions.
+    # The type of runner that the job will run on
     runs-on: ubuntu-latest
-
-    # Variables disponibles durante la ejecución.
+    environment: development
     env:
       DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
-      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
-
-      # Verifica que el Git Folder se llame exactamente databricks_Github.
+      DATABRICKS_TOKEN:  ${{ secrets.DATABRICKS_TOKEN }}
       REPO_PATH: /Workspace/Users/${{ secrets.DATABRICKS_EMAIL }}/databricks_Github
 
-      # Descomenta estas variables si posteriormente crearás un archivo Wheel.
-      # DBFS_LIB_PATH: dbfs:/path/to/libraries/
-      # LATEST_WHEEL_NAME: latest_wheel_name.whl
-
+    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Descarga el contenido del repositorio en el runner.
-      - name: Descargar repositorio
-        uses: actions/checkout@v4
+    # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
+    - uses: actions/checkout@v3
 
-      # Configura Python.
-      - name: Configurar Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+    - name: Setup Python
+      uses: actions/setup-python@v3
+      with:
+      # Version range or exact version of a Python version to use, using SemVer's version range syntax.
+        python-version: 3.8
 
-      # Instala la CLI de Databricks.
-      - name: Instalar Databricks CLI
-        uses: databricks/setup-cli@main
+    # Download the Databricks CLI. See https://github.com/databricks/setup-cli
+    - uses: databricks/setup-cli@main
 
-      # Comprueba que el host y el token funcionen.
-      - name: Comprobar conexión con Databricks
-        run: databricks current-user me
+    - name: Extract branch name
+      shell: bash
+      run: echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"
+      id: extract_branch
 
-      # Obtiene el nombre de la rama que inició el workflow.
-      - name: Obtener nombre de la rama
-        id: extract_branch
-        shell: bash
-        run: echo "branch=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-
-      # Actualiza el Git Folder con el contenido de la rama.
-      - name: Actualizar Git Folder de Databricks
-        run: |
-          databricks repos update "${REPO_PATH}" \
-            --branch "${{ steps.extract_branch.outputs.branch }}"
-
-      # Las siguientes instrucciones se utilizarían para construir un Wheel.
-      # - name: Instalar dependencias
-      #   run: |
-      #     pip install pytest setuptools wheel
-
-      # - name: Construir y subir Wheel
-      #   run: |
-      #     cd "$GITHUB_WORKSPACE"
-      #     python setup.py bdist_wheel
-      #     databricks fs cp --overwrite ./dist/* "${DBFS_LIB_PATH}"
-      #     databricks fs cp --overwrite ./dist/* \
-      #       "${DBFS_LIB_PATH}${LATEST_WHEEL_NAME}"
+    - name: Update Databricks Git folder
+      run: |
+        databricks repos update ${{env.REPO_PATH}} --branch "${{ steps.extract_branch.outputs.branch }}"
