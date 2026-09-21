@@ -1,0 +1,74 @@
+# Pipeline para sincronizar GitHub con un Git Folder de Databricks.
+
+name: CI - Databricks
+
+# Define cuándo se ejecutará el workflow.
+on:
+  # Se ejecutará automáticamente cuando se realice un push a main.
+  push:
+    branches:
+      - main
+
+  # Permite ejecutarlo manualmente desde la pestaña Actions.
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    # Sistema operativo utilizado por GitHub Actions.
+    runs-on: ubuntu-latest
+
+    # Variables disponibles durante la ejecución.
+    env:
+      DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+      DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+
+      # Verifica que el Git Folder se llame exactamente databricks_Github.
+      REPO_PATH: /Workspace/Users/${{ secrets.DATABRICKS_EMAIL }}/databricks_Github
+
+      # Descomenta estas variables si posteriormente crearás un archivo Wheel.
+      # DBFS_LIB_PATH: dbfs:/path/to/libraries/
+      # LATEST_WHEEL_NAME: latest_wheel_name.whl
+
+    steps:
+      # Descarga el contenido del repositorio en el runner.
+      - name: Descargar repositorio
+        uses: actions/checkout@v4
+
+      # Configura Python.
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # Instala la CLI de Databricks.
+      - name: Instalar Databricks CLI
+        uses: databricks/setup-cli@main
+
+      # Comprueba que el host y el token funcionen.
+      - name: Comprobar conexión con Databricks
+        run: databricks current-user me
+
+      # Obtiene el nombre de la rama que inició el workflow.
+      - name: Obtener nombre de la rama
+        id: extract_branch
+        shell: bash
+        run: echo "branch=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      # Actualiza el Git Folder con el contenido de la rama.
+      - name: Actualizar Git Folder de Databricks
+        run: |
+          databricks repos update "${REPO_PATH}" \
+            --branch "${{ steps.extract_branch.outputs.branch }}"
+
+      # Las siguientes instrucciones se utilizarían para construir un Wheel.
+      # - name: Instalar dependencias
+      #   run: |
+      #     pip install pytest setuptools wheel
+
+      # - name: Construir y subir Wheel
+      #   run: |
+      #     cd "$GITHUB_WORKSPACE"
+      #     python setup.py bdist_wheel
+      #     databricks fs cp --overwrite ./dist/* "${DBFS_LIB_PATH}"
+      #     databricks fs cp --overwrite ./dist/* \
+      #       "${DBFS_LIB_PATH}${LATEST_WHEEL_NAME}"
